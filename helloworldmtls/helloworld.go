@@ -9,37 +9,120 @@ import (
 	"os"
 	"time"
 
-	"go.temporal.io/sdk/activity"
+	"github.com/google/uuid"
 	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 )
 
-// Workflow is a Hello World workflow definition.
-func Workflow(ctx workflow.Context, name string) (string, error) {
-	ao := workflow.ActivityOptions{
-		StartToCloseTimeout: 10 * time.Second,
+// app.TransferInput and app.TransferOutput are assumed to be defined.
+// Adjust these types according to your application's needs
+type (
+	// Input for MoneyTransferWorkflow
+	TransferInput struct {
+		Amount float64
+		// Add other necessary fields for your money transfer operation
 	}
-	ctx = workflow.WithActivityOptions(ctx, ao)
-
-	logger := workflow.GetLogger(ctx)
-	logger.Info("HelloWorld workflow started", "name", name)
-
-	var result string
-	err := workflow.ExecuteActivity(ctx, Activity, name).Get(ctx, &result)
-	if err != nil {
-		logger.Error("Activity failed.", "Error", err)
-		return "", err
+	// Output for MoneyTransferWorkflow
+	TransferOutput struct {
+		// Add fields representing the result of your money transfer operation
 	}
+)
 
-	logger.Info("HelloWorld workflow completed.", "result", result)
-
-	return result, nil
+// Define activities package or variable
+var MoneyTransferActivities struct {
+	Validate         func(context.Context, string) bool
+	Withdraw         func(context.Context, string, float64, string) string
+	Deposit          func(context.Context, string, float64, string) string
+	SendNotification func(context.Context, TransferInput) string
 }
 
-func Activity(ctx context.Context, name string) (string, error) {
-	logger := activity.GetLogger(ctx)
-	logger.Info("Activity", "name", name)
-	return "Hello " + name + "!", nil
+// MoneyTransferWorkflow executes the steps involved in transferring money.
+func MoneyTransferWorkflow(ctx workflow.Context, input TransferInput) (*TransferOutput, error) {
+	activityOptions := workflow.ActivityOptions{
+		StartToCloseTimeout: 5 * time.Second,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    1 * time.Second,
+			BackoffCoefficient: 2.0,
+			MaximumInterval:    30 * time.Second,
+		},
+	}
+	ctx = workflow.WithActivityOptions(ctx, activityOptions)
+
+	// Validate
+	err := workflow.ExecuteActivity(ctx, MoneyTransferActivities.Validate, input).Get(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	// Withdraw
+	var idempotencyKey string
+	_ = workflow.SideEffect(ctx, func(ctx workflow.Context) interface{} {
+		return uuid.New().String()
+	}).Get(&idempotencyKey)
+
+	err = workflow.ExecuteActivity(ctx, MoneyTransferActivities.Withdraw, idempotencyKey, input.Amount, "source-account-id").Get(ctx, nil) // Replace with actual account details
+	if err != nil {
+		return nil, err
+	}
+
+	// Deposit
+	depositResponse := ""
+	err = workflow.ExecuteActivity(ctx, MoneyTransferActivities.Deposit, idempotencyKey, input.Amount, "destination-account-id").Get(ctx, &depositResponse) // Replace with actual account details
+	if err != nil {
+		return nil, err
+	}
+
+	// Send Notification
+	err = workflow.ExecuteActivity(ctx, MoneyTransferActivities.SendNotification, input).Get(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	output := &TransferOutput{
+		// Populate the output with results from the activities
+	}
+	return output, nil
+}
+
+var OrderFulfillmentActivities struct {
+	ReserveInventory func(context.Context, Order) string
+	DeliverOrder     func(context.Context, Order) string
+}
+
+// OrderFulfillWorkflow orchestrates the order fulfillment process.
+// Define the Order type
+type Order struct {
+	ID          string
+	TotalAmount float64
+}
+
+func OrderFulfillWorkflow(ctx workflow.Context, order Order) error {
+	// ... other order fulfillment logic (e.g., reserveInventory)
+
+	// Nexus Client - Connect to the "payment-endpoint" Nexus endpoint
+	paymentClient := workflow.NewNexusClient("payment-endpoint", "payment-service")
+	// Prepare input for MoneyTransferWorkflow
+	transferInput := TransferInput{
+		Amount: order.TotalAmount,
+		// ... other required fields for money transfer ...
+	}
+
+	// Execute MoneyTransferWorkflow using Nexus
+	paymentClient.ExecuteOperation(ctx, "transferMoney", transferInput, workflow.NexusOperationOptions{})
+
+	// Reserve Inventory
+	err := workflow.ExecuteActivity(ctx, OrderFulfillmentActivities.ReserveInventory, order).Get(ctx, nil)
+	if err != nil {
+		return err
+	}
+
+	// Deliver Order
+	err = workflow.ExecuteActivity(ctx, OrderFulfillmentActivities.DeliverOrder, order).Get(ctx, nil)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // ParseClientOptionFlags parses the given arguments into client options. In

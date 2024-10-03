@@ -26,7 +26,12 @@ func main() {
 		TaskQueue: "hello-world-mtls",
 	}
 
-	we, err := c.ExecuteWorkflow(context.Background(), workflowOptions, helloworldmtls.Workflow, "Temporal")
+	order := helloworldmtls.Order{
+		ID:          "ABC123",
+		TotalAmount: 999.99,
+	}
+
+	we, err := c.ExecuteWorkflow(context.Background(), workflowOptions, helloworldmtls.OrderFulfillWorkflow, order)
 	if err != nil {
 		log.Fatalln("Unable to execute workflow", err)
 	}
