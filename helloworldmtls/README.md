@@ -1,6 +1,6 @@
 ### Nexus demo
-- Starts `OrderFulfillmentWorkflow` workflow which calls `MoneyTransferWorkflow` workflow as a Nexus Operation.
-- Requires Temporal Cloud account (see configuration details below)
+- Starts `OrderFulfillmentWorkflow` workflow which calls the `MoneyTransferWorkflow` workflow as a Nexus Operation.
+- Requires a Temporal Cloud account (see configuration details below)
 - Requires Nexus to be enabled in the Temporal Cloud account
 - Connects to a Nexus Endpoint named `stevea-nexus-endpoint`. Change this in [helloworld.go](./helloworld.go) for your purposes.
 - Nexus Code:
