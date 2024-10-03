@@ -1,3 +1,9 @@
+### Nexus demo
+- Starts `OrderFulfillmentWorkflow` workflow which calls `MoneyTransferWorkflow` workflow as a Nexus Operation.
+- Requires Temporal Cloud account (see configuration details below)
+- Requires Nexus to be enabled in the Temporal Cloud account
+- Connects to a Nexus Endpoint named `stevea-nexus-endpoint`. Change this in [helloworld.go](./helloworld.go) for your purposes.
+
 ### Steps to run this sample:
 1) Configure a [Temporal Server](https://github.com/temporalio/samples-go/tree/main/#how-to-use) (such as Temporal Cloud) with mTLS.
 
