@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 
+	"github.com/google/uuid"
 	"github.com/temporalio/samples-go/helloworldmtls"
 	"go.temporal.io/sdk/client"
 )
@@ -22,8 +24,8 @@ func main() {
 	defer c.Close()
 
 	workflowOptions := client.StartWorkflowOptions{
-		ID:        "hello_world_workflowID",
-		TaskQueue: "hello-world-mtls",
+		ID:        fmt.Sprintf("orderFulfill-nexus-%s", uuid.New()),
+		TaskQueue: "order-fulfill-nexus",
 	}
 
 	order := helloworldmtls.Order{

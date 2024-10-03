@@ -1,7 +1,6 @@
 package helloworldmtls
 
 import (
-	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"flag"
@@ -15,26 +14,16 @@ import (
 	"go.temporal.io/sdk/workflow"
 )
 
-// app.TransferInput and app.TransferOutput are assumed to be defined.
-// Adjust these types according to your application's needs
-type (
-	// Input for MoneyTransferWorkflow
-	TransferInput struct {
-		Amount float64
-		// Add other necessary fields for your money transfer operation
-	}
-	// Output for MoneyTransferWorkflow
-	TransferOutput struct {
-		// Add fields representing the result of your money transfer operation
-	}
-)
+// Input for MoneyTransferWorkflow
+type TransferInput struct {
+	Amount float64
+	// Add other necessary fields for your money transfer operation
+}
 
-// Define activities package or variable
-var MoneyTransferActivities struct {
-	Validate         func(context.Context, string) bool
-	Withdraw         func(context.Context, string, float64, string) string
-	Deposit          func(context.Context, string, float64, string) string
-	SendNotification func(context.Context, TransferInput) string
+type TransferOutput struct {
+	Status  string
+	Message string
+	// Add other fields representing the result of your money transfer operation
 }
 
 // MoneyTransferWorkflow executes the steps involved in transferring money.
@@ -50,7 +39,7 @@ func MoneyTransferWorkflow(ctx workflow.Context, input TransferInput) (*Transfer
 	ctx = workflow.WithActivityOptions(ctx, activityOptions)
 
 	// Validate
-	err := workflow.ExecuteActivity(ctx, MoneyTransferActivities.Validate, input).Get(ctx, nil)
+	err := workflow.ExecuteActivity(ctx, (*PaymentActivities).Validate, input).Get(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -60,47 +49,52 @@ func MoneyTransferWorkflow(ctx workflow.Context, input TransferInput) (*Transfer
 		return uuid.New().String()
 	}).Get(&idempotencyKey)
 
-	err = workflow.ExecuteActivity(ctx, MoneyTransferActivities.Withdraw, idempotencyKey, input.Amount, "source-account-id").Get(ctx, nil) // Replace with actual account details
+	err = workflow.ExecuteActivity(ctx, (*PaymentActivities).Withdraw, idempotencyKey, input.Amount, "source-account-id").Get(ctx, nil) // Replace with actual account details
 	if err != nil {
 		return nil, err
 	}
 
 	// Deposit
 	depositResponse := ""
-	err = workflow.ExecuteActivity(ctx, MoneyTransferActivities.Deposit, idempotencyKey, input.Amount, "destination-account-id").Get(ctx, &depositResponse) // Replace with actual account details
+	err = workflow.ExecuteActivity(ctx, (*PaymentActivities).Deposit, idempotencyKey, input.Amount, "destination-account-id").Get(ctx, &depositResponse) // Replace with actual account details
 	if err != nil {
 		return nil, err
 	}
 
 	// Send Notification
-	err = workflow.ExecuteActivity(ctx, MoneyTransferActivities.SendNotification, input).Get(ctx, nil)
+	err = workflow.ExecuteActivity(ctx, (*PaymentActivities).SendNotification, input).Get(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
 
 	output := &TransferOutput{
-		// Populate the output with results from the activities
+		Status:  "Success",
+		Message: "Transfer completed successfully",
+		// Populate other fields as needed
 	}
 	return output, nil
 }
 
-var OrderFulfillmentActivities struct {
-	ReserveInventory func(context.Context, Order) string
-	DeliverOrder     func(context.Context, Order) string
-}
-
-// OrderFulfillWorkflow orchestrates the order fulfillment process.
 // Define the Order type
 type Order struct {
 	ID          string
 	TotalAmount float64
 }
 
+// OrderFulfillWorkflow orchestrates the order fulfillment process.
 func OrderFulfillWorkflow(ctx workflow.Context, order Order) error {
-	// ... other order fulfillment logic (e.g., reserveInventory)
+	activityOptions := workflow.ActivityOptions{
+		StartToCloseTimeout: 5 * time.Second,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    1 * time.Second,
+			BackoffCoefficient: 2.0,
+			MaximumInterval:    30 * time.Second,
+		},
+	}
+	ctx = workflow.WithActivityOptions(ctx, activityOptions)
 
-	// Nexus Client - Connect to the "payment-endpoint" Nexus endpoint
-	paymentClient := workflow.NewNexusClient("payment-endpoint", "payment-service")
+	// Nexus Client - Connect to the "stevea-nexus-endpoint" Nexus endpoint
+	paymentClient := workflow.NewNexusClient("stevea-nexus-endpoint", "payment-service")
 	// Prepare input for MoneyTransferWorkflow
 	transferInput := TransferInput{
 		Amount: order.TotalAmount,
@@ -108,16 +102,21 @@ func OrderFulfillWorkflow(ctx workflow.Context, order Order) error {
 	}
 
 	// Execute MoneyTransferWorkflow using Nexus
-	paymentClient.ExecuteOperation(ctx, "transferMoney", transferInput, workflow.NexusOperationOptions{})
+	handle := paymentClient.ExecuteOperation(ctx, "transferMoney", transferInput, workflow.NexusOperationOptions{})
+
+	var transferResult TransferOutput
+	if err := handle.Get(ctx, &transferResult); err != nil {
+		return err
+	}
 
 	// Reserve Inventory
-	err := workflow.ExecuteActivity(ctx, OrderFulfillmentActivities.ReserveInventory, order).Get(ctx, nil)
+	err := workflow.ExecuteActivity(ctx, (*OrderActivities).ReserveInventory, order).Get(ctx, nil)
 	if err != nil {
 		return err
 	}
 
 	// Deliver Order
-	err = workflow.ExecuteActivity(ctx, OrderFulfillmentActivities.DeliverOrder, order).Get(ctx, nil)
+	err = workflow.ExecuteActivity(ctx, (*OrderActivities).DeliverOrder, order).Get(ctx, nil)
 	if err != nil {
 		return err
 	}
@@ -130,7 +129,7 @@ func OrderFulfillWorkflow(ctx workflow.Context, order Order) error {
 // exit with help info.
 func ParseClientOptionFlags(args []string) (client.Options, error) {
 	// Parse args
-	set := flag.NewFlagSet("hello-world-mtls", flag.ExitOnError)
+	set := flag.NewFlagSet("order-fulfill-nexus", flag.ExitOnError)
 	targetHost := set.String("target-host", "localhost:7233", "Host:port for the server")
 	namespace := set.String("namespace", "default", "Namespace for the server")
 	serverRootCACert := set.String("server-root-ca-cert", "", "Optional path to root server CA cert")
