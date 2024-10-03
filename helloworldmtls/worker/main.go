@@ -14,31 +14,15 @@ import (
 	"go.temporal.io/sdk/worker"
 )
 
-var TransferMoneyOperation = temporalnexus.NewSyncOperation(
+var TransferMoneyOperation = temporalnexus.NewWorkflowRunOperation(
 	"transferMoney",
-	func(ctx context.Context, c client.Client, input helloworldmtls.TransferInput, soo nexus.StartOperationOptions) (helloworldmtls.TransferOutput, error) {
-		// Execute MoneyTransferWorkflow synchronously
-		var result helloworldmtls.TransferOutput
-		we, err := c.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
-			ID:        fmt.Sprintf("transferMoney-nexus-%s", uuid.New()),
+	helloworldmtls.MoneyTransferWorkflow,
+	func(ctx context.Context, input helloworldmtls.TransferInput, soo nexus.StartOperationOptions) (client.StartWorkflowOptions, error) {
+		client := client.StartWorkflowOptions{
+			ID:        fmt.Sprintf("transferMoney-%s", uuid.New()),
 			TaskQueue: "order-fulfill-nexus",
-		}, helloworldmtls.MoneyTransferWorkflow, input)
-		if err != nil {
-			return helloworldmtls.TransferOutput{}, err
 		}
-
-		err = we.Get(ctx, &result)
-		if err != nil {
-			return helloworldmtls.TransferOutput{}, err
-		}
-
-		output := helloworldmtls.TransferOutput{
-			Status:  result.Status,
-			Message: result.Message,
-		}
-
-		return output, nil
-
+		return client, nil
 	},
 )
 

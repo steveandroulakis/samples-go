@@ -5,7 +5,7 @@
 - Connects to a Nexus Endpoint named `stevea-nexus-endpoint`. Change this in [helloworld.go](./helloworld.go) for your purposes.
 - Nexus Code:
   - OrderFullfillmentWorkflow in [helloworld.go](./helloworld.go) calls `ExecuteOperation` to call the Nexus Operation Handler
-  - The Nexus Operation Handler is in the worker code in [worker.go](./worker/main.go) as a blocking `NewSyncOperation`, executing the MoneyTransferWorkflow
+  - The Nexus Operation Handler is in the worker code in [worker.go](./worker/main.go) as a `NewWorkflowRunOperation`, executing the MoneyTransferWorkflow
 
 ### Steps to run this sample:
 1) Configure a [Temporal Server](https://github.com/temporalio/samples-go/tree/main/#how-to-use) (such as Temporal Cloud) with mTLS.
