@@ -35,7 +35,6 @@ var TransferMoneyOperation = temporalnexus.NewSyncOperation(
 		output := helloworldmtls.TransferOutput{
 			Status:  result.Status,
 			Message: result.Message,
-			// Map other fields as needed
 		}
 
 		return output, nil

@@ -17,16 +17,13 @@ import (
 // Input for MoneyTransferWorkflow
 type TransferInput struct {
 	Amount float64
-	// Add other necessary fields for your money transfer operation
 }
 
 type TransferOutput struct {
 	Status  string
 	Message string
-	// Add other fields representing the result of your money transfer operation
 }
 
-// MoneyTransferWorkflow executes the steps involved in transferring money.
 func MoneyTransferWorkflow(ctx workflow.Context, input TransferInput) (*TransferOutput, error) {
 	activityOptions := workflow.ActivityOptions{
 		StartToCloseTimeout: 5 * time.Second,
@@ -70,7 +67,6 @@ func MoneyTransferWorkflow(ctx workflow.Context, input TransferInput) (*Transfer
 	output := &TransferOutput{
 		Status:  "Success",
 		Message: "Transfer completed successfully",
-		// Populate other fields as needed
 	}
 	return output, nil
 }
@@ -82,7 +78,7 @@ type Order struct {
 }
 
 // OrderFulfillWorkflow orchestrates the order fulfillment process.
-func OrderFulfillWorkflow(ctx workflow.Context, order Order) error {
+func OrderFulfillWorkflow(ctx workflow.Context, order Order) (string, error) {
 	activityOptions := workflow.ActivityOptions{
 		StartToCloseTimeout: 5 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
@@ -93,12 +89,10 @@ func OrderFulfillWorkflow(ctx workflow.Context, order Order) error {
 	}
 	ctx = workflow.WithActivityOptions(ctx, activityOptions)
 
-	// Nexus Client - Connect to the "stevea-nexus-endpoint" Nexus endpoint
+	// Nexus Client - Connect to the Nexus endpoint
 	paymentClient := workflow.NewNexusClient("stevea-nexus-endpoint", "payment-service")
-	// Prepare input for MoneyTransferWorkflow
 	transferInput := TransferInput{
 		Amount: order.TotalAmount,
-		// ... other required fields for money transfer ...
 	}
 
 	// Execute MoneyTransferWorkflow using Nexus
@@ -106,22 +100,22 @@ func OrderFulfillWorkflow(ctx workflow.Context, order Order) error {
 
 	var transferResult TransferOutput
 	if err := handle.Get(ctx, &transferResult); err != nil {
-		return err
+		return "", err
 	}
 
 	// Reserve Inventory
 	err := workflow.ExecuteActivity(ctx, (*OrderActivities).ReserveInventory, order).Get(ctx, nil)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	// Deliver Order
 	err = workflow.ExecuteActivity(ctx, (*OrderActivities).DeliverOrder, order).Get(ctx, nil)
 	if err != nil {
-		return err
+		return "", err
 	}
 
-	return nil
+	return "Order fulfilled", nil
 }
 
 // ParseClientOptionFlags parses the given arguments into client options. In
