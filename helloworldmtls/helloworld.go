@@ -14,6 +14,53 @@ import (
 	"go.temporal.io/sdk/workflow"
 )
 
+// Define the Order type
+type Order struct {
+	ID          string
+	TotalAmount float64
+}
+
+// OrderFulfillWorkflow orchestrates the order fulfillment process.
+func OrderFulfillWorkflow(ctx workflow.Context, order Order) (string, error) {
+	activityOptions := workflow.ActivityOptions{
+		StartToCloseTimeout: 5 * time.Second,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    1 * time.Second,
+			BackoffCoefficient: 2.0,
+			MaximumInterval:    30 * time.Second,
+		},
+	}
+	ctx = workflow.WithActivityOptions(ctx, activityOptions)
+
+	// Nexus Client - Connect to the Nexus endpoint
+	paymentClient := workflow.NewNexusClient("stevea-nexus-endpoint", "payment-service")
+	transferInput := TransferInput{
+		Amount: order.TotalAmount,
+	}
+
+	// Execute MoneyTransferWorkflow using Nexus
+	handle := paymentClient.ExecuteOperation(ctx, "transferMoney", transferInput, workflow.NexusOperationOptions{})
+
+	var transferResult TransferOutput
+	if err := handle.Get(ctx, &transferResult); err != nil {
+		return "", err
+	}
+
+	// Reserve Inventory
+	err := workflow.ExecuteActivity(ctx, (*OrderActivities).ReserveInventory, order).Get(ctx, nil)
+	if err != nil {
+		return "", err
+	}
+
+	// Deliver Order
+	err = workflow.ExecuteActivity(ctx, (*OrderActivities).DeliverOrder, order).Get(ctx, nil)
+	if err != nil {
+		return "", err
+	}
+
+	return "Order fulfilled", nil
+}
+
 // Input for MoneyTransferWorkflow
 type TransferInput struct {
 	Amount float64
@@ -69,53 +116,6 @@ func MoneyTransferWorkflow(ctx workflow.Context, input TransferInput) (*Transfer
 		Message: "Transfer completed successfully",
 	}
 	return output, nil
-}
-
-// Define the Order type
-type Order struct {
-	ID          string
-	TotalAmount float64
-}
-
-// OrderFulfillWorkflow orchestrates the order fulfillment process.
-func OrderFulfillWorkflow(ctx workflow.Context, order Order) (string, error) {
-	activityOptions := workflow.ActivityOptions{
-		StartToCloseTimeout: 5 * time.Second,
-		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval:    1 * time.Second,
-			BackoffCoefficient: 2.0,
-			MaximumInterval:    30 * time.Second,
-		},
-	}
-	ctx = workflow.WithActivityOptions(ctx, activityOptions)
-
-	// Nexus Client - Connect to the Nexus endpoint
-	paymentClient := workflow.NewNexusClient("stevea-nexus-endpoint", "payment-service")
-	transferInput := TransferInput{
-		Amount: order.TotalAmount,
-	}
-
-	// Execute MoneyTransferWorkflow using Nexus
-	handle := paymentClient.ExecuteOperation(ctx, "transferMoney", transferInput, workflow.NexusOperationOptions{})
-
-	var transferResult TransferOutput
-	if err := handle.Get(ctx, &transferResult); err != nil {
-		return "", err
-	}
-
-	// Reserve Inventory
-	err := workflow.ExecuteActivity(ctx, (*OrderActivities).ReserveInventory, order).Get(ctx, nil)
-	if err != nil {
-		return "", err
-	}
-
-	// Deliver Order
-	err = workflow.ExecuteActivity(ctx, (*OrderActivities).DeliverOrder, order).Get(ctx, nil)
-	if err != nil {
-		return "", err
-	}
-
-	return "Order fulfilled", nil
 }
 
 // ParseClientOptionFlags parses the given arguments into client options. In
